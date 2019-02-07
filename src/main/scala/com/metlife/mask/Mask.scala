@@ -1,19 +1,11 @@
 package com.metlife.mask
 
-//case class MaskType(maskNumber:Option[String],)
-// mask_db
-//
-import com.metlife.mask.Mask.encryptStr
+
 import javax.crypto.Cipher
 import javax.crypto.spec.SecretKeySpec
 import org.apache.commons.codec.binary.Base64
-import org.apache.hadoop.hive.ql.exec.UDF
-import org.apache.spark.sql.{DataFrame, SaveMode}
-import javax.crypto.Cipher
-import javax.crypto.spec.SecretKeySpec
-import org.apache.commons.codec.binary.Base64
-import org.apache.hadoop.hive.ql.exec.UDF
 import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.{DataFrame, SaveMode}
 
 
 object Mask {
@@ -23,6 +15,7 @@ object Mask {
   val maskKeyColumn = "mask_key_secret_sp19"
   val maskValueColumn = "mask_value_sp19"
   val BASE_PATH_TEMP = "/Users/dhiraj/Desktop/"
+
   val ENCRYPT_PASSWD = "abcdefghijklmno1" // need to pull from vault
 
 
@@ -40,8 +33,7 @@ object Mask {
 
 
   def maskNumber(dfToMask: DataFrame, columnName: String, globalName: String, createIfNotExists: Boolean = false, numberOfDigits: Int): DataFrame = {
-    import org.apache.spark.sql.functions.{min, max}
-    import org.apache.spark.sql.Row
+    import org.apache.spark.sql.functions.max
 
     // step 1 : mask the column
     val columnType = dfToMask.select(columnName).schema.head.dataType
@@ -65,18 +57,22 @@ object Mask {
 
       val jdf = dfToMaskEnc.join(cacheTableGlobal, dfToMaskEnc(columnName) === cacheTableGlobal(maskKeyColumn),"left_outer")
 
-      jdf.filter(jdf(maskKeyColumn).isNull).drop(maskKeyColumn, maskValueColumn).write.mode(SaveMode.Overwrite).parquet(BASE_PATH_TEMP+"new_keys")
-      val newKeysDf = jdf.sparkSession.read.parquet(BASE_PATH_TEMP+"new_keys")
+      val newKeysFrame = jdf.filter(jdf(maskKeyColumn).isNull).drop(maskKeyColumn, maskValueColumn)
+      val foundKeysFrame = jdf.filter(jdf(maskKeyColumn).isNotNull).drop(columnName, maskKeyColumn).withColumnRenamed(maskValueColumn, columnName)
 
-      jdf.filter(jdf(maskKeyColumn).isNotNull).drop(columnName,maskKeyColumn).withColumnRenamed(maskValueColumn, columnName).write.mode(SaveMode.Overwrite).parquet(BASE_PATH_TEMP+"found_keys")
+      //TODO Temp hack to run in local.
+      newKeysFrame.write.mode(SaveMode.Overwrite).parquet(BASE_PATH_TEMP+"new_keys")
+      val newKeysDf = jdf.sparkSession.read.parquet(BASE_PATH_TEMP+"new_keys")
+      foundKeysFrame.write.mode(SaveMode.Overwrite).parquet(BASE_PATH_TEMP+"found_keys")
       val foundKeys =jdf.sparkSession.read.parquet(BASE_PATH_TEMP+"found_keys")
+
+
 
      (begin, Some(foundKeys), newKeysDf)
     }
 
 
     val newColumn = columnName + "_" + "SAM_QRE_321_455"
-    import org.apache.spark.sql.functions._
     //val t1 = newKeysDf.withColumn(newColumn, monotonically_increasing_id)
     val t2 = dfZipWithIndex(newKeysDf, begin, newColumn, false)
     val frame = t2.select(columnName, newColumn).toDF(maskKeyColumn, maskValueColumn)
@@ -101,9 +97,8 @@ object Mask {
   }
 
 
-  import org.apache.spark.sql.DataFrame
+  import org.apache.spark.sql.{DataFrame, Row}
   import org.apache.spark.sql.types.{LongType, StructField, StructType}
-  import org.apache.spark.sql.Row
 
 
   def dfZipWithIndex(
@@ -159,10 +154,6 @@ object Mask {
     output.trim
 
   }
-
-
-  //  spark.udf.register("my_encrypt",encrypt _)
-  //  spark.udf.register("my_decrypt",decrypt _)
 
 
 }
