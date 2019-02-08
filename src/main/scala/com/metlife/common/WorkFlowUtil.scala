@@ -153,7 +153,7 @@ object WorkFlowUtil {
   }
 
   //TODO this is temp hack.
-  private[wf] def getDelimiter(delimiter: String): String = {
+  private def getDelimiter(delimiter: String): String = {
     delimiter match {
       case "001" => "\001"
       case _ => delimiter
@@ -331,7 +331,7 @@ object WorkFlowUtil {
     * @param columnCasts
     * @return
     */
-  private[wf] def columnCasts(df: DataFrame, columnCasts: Option[Array[Cast]], colMap: Map[String, String]): DataFrame = {
+  private def columnCasts(df: DataFrame, columnCasts: Option[Array[Cast]], colMap: Map[String, String]): DataFrame = {
 
     if (columnCasts.isDefined) {
       val arr = columnCasts.get
@@ -376,7 +376,7 @@ object WorkFlowUtil {
   }
 
 
-  private[wf] def splitSQLString(sql: String): List[String] = {
+  private def splitSQLString(sql: String): List[String] = {
 
     def lsplit(pos: List[Int], str: String): List[String] = {
       val (rest, result) = pos.foldRight((str, List[String]())) {
