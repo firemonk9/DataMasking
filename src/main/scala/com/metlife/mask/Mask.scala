@@ -57,18 +57,18 @@ object Mask {
 
       val jdf = dfToMaskEnc.join(cacheTableGlobal, dfToMaskEnc(columnName) === cacheTableGlobal(maskKeyColumn),"left_outer")
 
-      val newKeysFrame = jdf.filter(jdf(maskKeyColumn).isNull).drop(maskKeyColumn, maskValueColumn)
-      val foundKeysFrame = jdf.filter(jdf(maskKeyColumn).isNotNull).drop(columnName, maskKeyColumn).withColumnRenamed(maskValueColumn, columnName)
+      val newKeysFrame = jdf.filter(jdf(maskKeyColumn).isNull).drop(maskKeyColumn, maskValueColumn).localCheckpoint(true)
+      val foundKeysFrame = jdf.filter(jdf(maskKeyColumn).isNotNull).drop(columnName, maskKeyColumn).withColumnRenamed(maskValueColumn, columnName).localCheckpoint(true)
 
       //TODO Temp hack to run in local.
-      newKeysFrame.write.mode(SaveMode.Overwrite).parquet(BASE_PATH_TEMP+"new_keys")
-      val newKeysDf = jdf.sparkSession.read.parquet(BASE_PATH_TEMP+"new_keys")
-      foundKeysFrame.write.mode(SaveMode.Overwrite).parquet(BASE_PATH_TEMP+"found_keys")
-      val foundKeys =jdf.sparkSession.read.parquet(BASE_PATH_TEMP+"found_keys")
+//      newKeysFrame.write.mode(SaveMode.Overwrite).parquet(BASE_PATH_TEMP+"new_keys")
+//      val newKeysDf = jdf.sparkSession.read.parquet(BASE_PATH_TEMP+"new_keys")
+//      foundKeysFrame.write.mode(SaveMode.Overwrite).parquet(BASE_PATH_TEMP+"found_keys")
+//      val foundKeys =jdf.sparkSession.read.parquet(BASE_PATH_TEMP+"found_keys")
 
 
 
-     (begin, Some(foundKeys), newKeysDf)
+     (begin, Some(foundKeysFrame), newKeysFrame)
     }
 
 
