@@ -38,31 +38,43 @@ class MaskTest extends FunSuite with SharedSparkContext {
   }
 
   test("testMaskNumber multiple") {
-    val sqlContext = new SQLContext(sc)
+    val sqlContext = new org.apache.spark.sql.SQLContext(sc)
     import sqlContext.implicits._
     val spark = sqlContext.sparkSession
     import spark.implicits._
+    import org.apache.spark.sql._
+    import org.apache.spark.sql.expressions.Window
+    import org.apache.spark.sql.functions.{lit, max, row_number}
 
-    val sample = spark.range(10000).toDF("ssn")
-    val sampleF = sample.withColumn("name",sample("ssn"))
 
-    val sample1 = spark.range(10000).toDF("ssn")
-    val sampleFNew = sample1.withColumn("ssn",sample1("ssn")+5000)
+    val df = spark.range(5).toDF("ssn").withColumn("abc",lit("12"))
+    val sampleF = df.union(df).union(df).union(df).union(df).union(df).union(df).union(df).union(df).union(df)
 
     val edf = Mask.maskColumn(sampleF,"ssn","SSN",Mask.REAL_NUMBER,true,9)
-    edf.show()
-    val snTbl = spark.sql("select * from SSN").count()
-    assert(snTbl == sampleF.count())
+    assert(sampleF.count() == edf.count())
 
-    val ndf = Mask.maskColumn(sampleFNew,"ssn","SSN",Mask.REAL_NUMBER,true,9)
-    assert(sampleFNew.count() == ndf.count())
-    val snTbl1 = spark.sql("select * from SSN").count()
-    assert(snTbl1 == (sampleF.count()+5000))
+    val edf1 = Mask.maskColumn(sampleF,"ssn","SSN",Mask.REAL_NUMBER,true,9)
+    assert(sampleF.count() == edf.count())
 
-    val ndf1 = Mask.maskColumn(sampleFNew,"ssn","SSN",Mask.REAL_NUMBER,true,9)
-    assert(sampleFNew.count() == ndf1.count())
 
-    ndf.show()
+
+
+//
+    //
+    //    val edf = Mask.maskColumn(sampleF,"ssn","SSN",Mask.REAL_NUMBER,true,9)
+//    edf.show()
+//    val snTbl = spark.sql("select * from SSN").count()
+//    assert(snTbl == sampleF.count())
+//
+//    val ndf = Mask.maskColumn(sampleFNew,"ssn","SSN",Mask.REAL_NUMBER,true,9)
+//    assert(sampleFNew.count() == ndf.count())
+//    val snTbl1 = spark.sql("select * from SSN").count()
+//    assert(snTbl1 == (sampleF.count()+5000))
+//
+//    val ndf1 = Mask.maskColumn(sampleFNew,"ssn","SSN",Mask.REAL_NUMBER,true,9)
+//    assert(sampleFNew.count() == ndf1.count())
+//
+//    ndf.show()
 
 
   }

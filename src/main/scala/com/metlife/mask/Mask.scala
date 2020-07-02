@@ -5,6 +5,7 @@ import javax.crypto.Cipher
 import javax.crypto.spec.SecretKeySpec
 import org.apache.commons.codec.binary.Base64
 import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.functions.expr
 import org.apache.spark.sql.{DataFrame, SaveMode}
 
 
@@ -37,7 +38,7 @@ object Mask {
 
     // step 1 : mask the column
     val columnType = dfToMask.select(columnName).schema.head.dataType
-    val frame123:DataFrame = dfToMask.withColumn(columnName, dfToMask(columnName).cast(StringType))
+    val frame123: DataFrame = dfToMask.withColumn(columnName, dfToMask(columnName).cast(StringType))
     val dfToMaskEnc = getEncryptedColumn(frame123, columnName)
 
     if (!dfToMask.sparkSession.catalog.tableExists(globalName) && createIfNotExists == false) {
@@ -48,38 +49,39 @@ object Mask {
       val begin = ("1" + "0" * numberOfDigits).toInt
       (begin, None, dfToMaskEnc)
     }
-    else  {
+    else {
 
       val cacheTableGlobal = dfToMaskEnc.sparkSession.sql("select * from " + globalName)
       cacheTableGlobal.show(false)
       val maxValue = cacheTableGlobal.agg(max(cacheTableGlobal(maskValueColumn))).head.getLong(0)
       val begin = (maxValue + 1).toInt
 
-      val jdf = dfToMaskEnc.join(cacheTableGlobal, dfToMaskEnc(columnName) === cacheTableGlobal(maskKeyColumn),"left_outer")
+      val jdf = dfToMaskEnc.join(cacheTableGlobal, dfToMaskEnc(columnName) === cacheTableGlobal(maskKeyColumn), "left_outer")
 
       val newKeysFrame = jdf.filter(jdf(maskKeyColumn).isNull).drop(maskKeyColumn, maskValueColumn).localCheckpoint(true)
       val foundKeysFrame = jdf.filter(jdf(maskKeyColumn).isNotNull).drop(columnName, maskKeyColumn).withColumnRenamed(maskValueColumn, columnName).localCheckpoint(true)
 
       //TODO Temp hack to run in local.
-//      newKeysFrame.write.mode(SaveMode.Overwrite).parquet(BASE_PATH_TEMP+"new_keys")
-//      val newKeysDf = jdf.sparkSession.read.parquet(BASE_PATH_TEMP+"new_keys")
-//      foundKeysFrame.write.mode(SaveMode.Overwrite).parquet(BASE_PATH_TEMP+"found_keys")
-//      val foundKeys =jdf.sparkSession.read.parquet(BASE_PATH_TEMP+"found_keys")
+      //      newKeysFrame.write.mode(SaveMode.Overwrite).parquet(BASE_PATH_TEMP+"new_keys")
+      //      val newKeysDf = jdf.sparkSession.read.parquet(BASE_PATH_TEMP+"new_keys")
+      //      foundKeysFrame.write.mode(SaveMode.Overwrite).parquet(BASE_PATH_TEMP+"found_keys")
+      //      val foundKeys =jdf.sparkSession.read.parquet(BASE_PATH_TEMP+"found_keys")
 
 
-
-     (begin, Some(foundKeysFrame), newKeysFrame)
+      (begin, Some(foundKeysFrame), newKeysFrame)
     }
 
 
     val newColumn = columnName + "_" + "SAM_QRE_321_455"
     //val t1 = newKeysDf.withColumn(newColumn, monotonically_increasing_id)
+
     val t2 = dfZipWithIndex(newKeysDf, begin, newColumn, false)
     val frame = t2.select(columnName, newColumn).toDF(maskKeyColumn, maskValueColumn)
+    val removeDups = frame.groupBy(maskKeyColumn).agg(expr("max(" + maskValueColumn + ") as " + maskValueColumn))
+    //    val  dataToAppendDF = removeDups.join(frame,Seq(maskKeyColumn))
+    removeDups.count()
 
-
-
-    val toSaveAsTable = frame.write.mode("append").saveAsTable(globalName)
+    val toSaveAsTable = removeDups.write.mode("append").saveAsTable(globalName)
     val t3 = t2.drop(columnName).withColumnRenamed(newColumn, columnName)
 
     t3.show()
@@ -91,7 +93,6 @@ object Mask {
 
     finalRes.show()
     finalRes.withColumn(columnName, finalRes(columnName).cast(columnType))
-
 
 
   }
@@ -107,7 +108,7 @@ object Mask {
                       colName: String = "id",
                       inFront: Boolean = true
                     ): DataFrame = {
-    df.sqlContext.createDataFrame(
+    val nndf = df.sqlContext.createDataFrame(
       df.rdd.zipWithIndex.map(ln =>
         Row.fromSeq(
           (if (inFront) Seq(ln._2 + offset) else Seq())
@@ -121,22 +122,23 @@ object Mask {
           (if (inFront) Array[StructField]() else Array(StructField(colName, LongType, false)))
       )
     )
+    nndf
   }
 
 
   /**
-    * This function encrypts the column and makes SHA-2 of the encrypted column.
-    *
-    * @param df
-    * @param colName
-    * @return
-    */
+   * This function encrypts the column and makes SHA-2 of the encrypted column.
+   *
+   * @param df
+   * @param colName
+   * @return
+   */
   def getEncryptedColumn(df: DataFrame, colName: String): DataFrame = {
     val spark = df.sparkSession
     import org.apache.spark.sql.functions._
 
 
-    val encryptStrUdf = udf[String,String](encryptStr)
+    val encryptStrUdf = udf[String, String](encryptStr)
     val edf = df.withColumn(colName, encryptStrUdf(df(colName)))
     edf.withColumn(colName, sha2(edf(colName), 512))
   }
@@ -144,7 +146,7 @@ object Mask {
 
   def encryptStr(col: String): String = {
 
-    if(col == null)
+    if (col == null)
       return col
     val password = ENCRYPT_PASSWD.getBytes()
     val cipher = Cipher.getInstance("AES/ECB/PKCS5Padding")
